@@ -1,7 +1,6 @@
 package log
 
 import (
-	"io/ioutil"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -34,7 +33,7 @@ func NewTestLogger() Logger {
 	if os.Getenv("LOG_TESTS") == "true" {
 		nullLogger.Out = os.Stdout
 	} else {
-		nullLogger.Out = ioutil.Discard // TODO rethink if we want to discard logging entirely for testing
+		//nullLogger.Out = ioutil.Discard // TODO rethink if we want to discard logging entirely for testing
 	}
 	return logrus.NewEntry(nullLogger)
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/arquillian/ike-prow-plugins/pkg/plugin/test-keeper"
 	"github.com/arquillian/ike-prow-plugins/pkg/server"
 	dto "github.com/prometheus/client_model/go"
-	"github.com/arquillian/ike-prow-plugins/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/arquillian/ike-prow-plugins/pkg/internal/test"
 	"gopkg.in/h2non/gock.v1"
@@ -16,7 +15,6 @@ import (
 
 var _ = Describe("Service Metrics", func() {
 
-	logger := log.NewTestLogger()
 	secret := []byte("123abc")
 	client := test.NewDefaultGitHubClient()
 	pluginName := testkeeper.ProwPluginName
@@ -33,17 +31,20 @@ var _ = Describe("Service Metrics", func() {
 			HmacSecret:         secret,
 		}
 		m, errs := server.RegisterMetrics(client)
-		if  len(errs) > 0 {
-			logger.Errorf("Prometheus metrics registration failed!")
-		} else {
-			prowServer.Metrics = m
-			metrics = m
+		if len(errs) > 0 {
+			Fail("Prometheus metrics registration failed!")
 		}
+		prowServer.Metrics = m
+		metrics = m
+
 		s = httptest.NewServer(prowServer)
 	})
 
 	AfterEach(func() {
 		s.Close()
+		prometheus.Unregister(metrics.RateLimit)
+		prometheus.Unregister(metrics.HandledEventsCounter)
+		prometheus.Unregister(metrics.WebHookCounter)
 	})
 
 	It("should count incoming webhook", func() {
@@ -51,14 +52,12 @@ var _ = Describe("Service Metrics", func() {
 		fullName := "bartoszmajsak/wfswarm-booster-pipeline-test"
 		payload := test.LoadFromFile("../plugin/work-in-progress/test_fixtures/github_calls/ready_pr_opened.json")
 
-		if err := phony.SendHook(s.URL, "pull_request", payload, secret); err != nil {
-			logger.Errorf("Error sending hook: %v", err)
-		}
-
 		// when
-		counter, err := metrics.WebHookCounter.GetMetricWithLabelValues(fullName)
+		err := phony.SendHook(s.URL, "pull_request", payload, secret)
 
 		// then
+		Ω(err).ShouldNot(HaveOccurred())
+		counter, err := metrics.WebHookCounter.GetMetricWithLabelValues(fullName)
 		Ω(err).ShouldNot(HaveOccurred())
 		Expect(count(counter)).To(Equal(1))
 	})
@@ -68,14 +67,12 @@ var _ = Describe("Service Metrics", func() {
 		eventType := "issue_comment"
 		payload := test.LoadFromFile("../plugin/test-keeper/test_fixtures/github_calls/prs/without_tests/skip_comment_by_admin.json")
 
-		if err := phony.SendHook(s.URL, "issue_comment", payload, secret); err != nil {
-			logger.Errorf("Error sending hook: %v", err)
-		}
-
 		// when
-		counter, err := metrics.HandledEventsCounter.GetMetricWithLabelValues(eventType)
+		err := phony.SendHook(s.URL, "issue_comment", payload, secret)
 
 		// then
+		Ω(err).ShouldNot(HaveOccurred())
+		counter, err := metrics.HandledEventsCounter.GetMetricWithLabelValues(eventType)
 		Ω(err).ShouldNot(HaveOccurred())
 		Expect(count(counter)).To(Equal(1))
 	})
@@ -95,11 +92,10 @@ var _ = Describe("Service Metrics", func() {
 		payload := test.LoadFromFile("../plugin/test-keeper/test_fixtures/github_calls/prs/without_tests/skip_comment_by_admin.json")
 
 		// when
-		if err := phony.SendHook(s.URL, "issue_comment", payload, secret); err != nil {
-			logger.Errorf("Error sending hook: %v", err)
-		}
+		err := phony.SendHook(s.URL, "issue_comment", payload, secret)
 
 		// then
+		Ω(err).ShouldNot(HaveOccurred())
 		Expect(gaugeValue(metrics.RateLimit.WithLabelValues("core"))).To(Equal(8))
 		Expect(gaugeValue(metrics.RateLimit.WithLabelValues("search"))).To(Equal(10))
 	})
